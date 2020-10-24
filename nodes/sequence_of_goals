@@ -1,0 +1,138 @@
+#!/usr/bin/env python
+
+import rospy
+import math
+
+import actionlib
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from actionlib_msgs.msg import GoalStatus
+from geometry_msgs.msg import Pose, Point, Quaternion
+from tf.transformations import quaternion_from_euler
+from actionlib_msgs.msg import GoalStatus
+
+
+class SequenceOfGoals():
+
+    def __init__(self):
+        goals_list = rospy.get_param("~goals")
+        self.goals_seq = list()
+
+        self.goals_frame = str(rospy.get_param("~goals_frame"))
+        rospy.loginfo("Goals Frame: " + str(self.goals_frame))
+
+        for goal in goals_list:
+            self.goals_seq.append(self.pose_2d_to_ros_pose((goal['x'],
+                                                            goal['y'],
+                                                            math.radians(goal['yaw']))
+                                                          ))
+
+        # Verify if there is at least one goal
+        assert(len(self.goals_seq) > 0)
+
+        self.goal_cnt = 0
+        self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+        rospy.loginfo("Waiting for move_base action server...")
+        wait = self.client.wait_for_server(rospy.Duration(5.0))
+        if not wait:
+            rospy.logerr("Action server not available!")
+            rospy.signal_shutdown("Action server not available!")
+            return
+        rospy.loginfo("Connected to move base server")
+
+    def active_cb(self):
+        rospy.loginfo("Goal pose " + str(self.goal_cnt+1) + " is now being processed "
+                      "by the Action Server...")
+
+    def feedback_cb(self, feedback):
+        rospy.loginfo("Feedback for goal pose " + str(self.goal_cnt+1)+" received")
+
+    def done_cb(self, status, result):
+        self.goal_cnt += 1
+
+        if status == GoalStatus.PENDING:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + 
+                          " PENDING. It has yet to be processed by the action server (Intermediate State).")
+
+        if status == GoalStatus.ACTIVE:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + 
+                          " currently ACTIVE and being processed by the action server (Intermediate State).")
+
+        if status == GoalStatus.PREEMPTED:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " received a cancel request after "
+                          "it started executing, completed execution!")
+
+        if status == GoalStatus.SUCCEEDED:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " reached")
+            if self.goal_cnt < len(self.goals_seq):
+                next_goal = MoveBaseGoal()
+                next_goal.target_pose.header.frame_id = self.goals_frame
+                next_goal.target_pose.header.stamp = rospy.Time.now()
+                next_goal.target_pose.pose = self.goals_seq[self.goal_cnt]
+                rospy.loginfo("Sending goal pose " + str(self.goal_cnt+1) + " to Action Server")
+                rospy.loginfo(str(self.goals_seq[self.goal_cnt]))
+                self.client.send_goal(next_goal, self.done_cb, self.active_cb, self.feedback_cb)
+            else:
+                rospy.loginfo("Final goal pose reached!")
+                rospy.signal_shutdown("Final goal pose reached!")
+                return
+
+        if status == GoalStatus.ABORTED:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " was ABORTED by the Action Server")
+            rospy.signal_shutdown("Goal pose " + str(self.goal_cnt)+" aborted, shutting down!")
+            return
+
+        if status == GoalStatus.REJECTED:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " has been REJECTED by the Action Server.")
+            rospy.signal_shutdown("Goal pose " + str(self.goal_cnt) + " rejected, shutting down!")
+            return
+
+        if status == GoalStatus.PREEMPTING:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + 
+                          " in PREEMPTING state. A cancel request has been received from the action client,"
+                          " but the action server has not confirmed the goal is canceled (Intermediate State).")
+
+        if status == GoalStatus.RECALLING:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " in RECALLING state. "
+                          "The goal has not been processed and a cancel request has been received from the "
+                          "action client, but the action server has not confirmed the goal is canceled "
+                          "(Intermediate State).")
+
+
+        if status == GoalStatus.RECALLED:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " received a cancel request before it "
+                          "started executing, successfully cancelled!")
+
+        if status == GoalStatus.LOST:
+            rospy.loginfo("Goal pose " + str(self.goal_cnt) + " in LOST State.")
+
+    def run(self):
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = self.goals_frame
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose = self.goals_seq[self.goal_cnt]
+        rospy.loginfo("Sending goal pose " + str(self.goal_cnt + 1) + " to Action Server")
+        rospy.loginfo(str(self.goals_seq[self.goal_cnt]))
+        self.client.send_goal(goal, self.done_cb, self.active_cb, self.feedback_cb)
+        rospy.spin()
+
+    def pose_2d_to_ros_pose(self, pose):
+        """Transform pose (x, y, yaw) to geometry_msgs/Pose. """
+        pose = Pose()
+        pose.position.x = pose[0]
+        pose.position.y = pose[1]
+        pose.position.z = 0.0
+
+        quat = quaternion_from_euler(0.0, 0.0, pose[2])
+
+        pose.orientation.x = quat[0]
+        pose.orientation.y = quat[1]
+        pose.orientation.z = quat[2]
+        pose.orientation.w = quat[3]
+
+        return pose
+
+
+if __name__ == '__main__':
+    rospy.init_node('sequence_of_goals')
+    move_base_seq = SequenceOfGoals()
+    move_base_seq.run()
