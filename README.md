@@ -1,0 +1,1 @@
+Sending a sequence of goals to the Move Base. Example using Python and C++.
