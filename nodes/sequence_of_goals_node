@@ -115,14 +115,14 @@ class SequenceOfGoals():
         self.client.send_goal(goal, self.done_cb, self.active_cb, self.feedback_cb)
         rospy.spin()
 
-    def pose_2d_to_ros_pose(self, pose):
+    def pose_2d_to_ros_pose(self, my_pose):
         """Transform pose (x, y, yaw) to geometry_msgs/Pose. """
         pose = Pose()
-        pose.position.x = pose[0]
-        pose.position.y = pose[1]
+        pose.position.x = my_pose[0]
+        pose.position.y = my_pose[1]
         pose.position.z = 0.0
 
-        quat = quaternion_from_euler(0.0, 0.0, pose[2])
+        quat = quaternion_from_euler(0.0, 0.0, my_pose[2])
 
         pose.orientation.x = quat[0]
         pose.orientation.y = quat[1]

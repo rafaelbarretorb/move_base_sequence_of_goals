@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+
+<launch>
+    <node pkg="move_base_sequence_of_goals" type="sequence_of_goals_node" name="sequence_of_goals" output="screen">
+		<rosparam file="$(find move_base_sequence_of_goals)/config/goals.yaml" command="load"/>
+    </node>
+</launch>
