@@ -10,6 +10,8 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from tf.transformations import quaternion_from_euler
 from actionlib_msgs.msg import GoalStatus
 
+from datetime import datetime
+
 
 class SequenceOfGoals():
 
@@ -32,7 +34,9 @@ class SequenceOfGoals():
         self.goal_cnt = 0
         self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         rospy.loginfo("Waiting for move_base action server...")
-        wait = self.client.wait_for_server(rospy.Duration(5.0))
+        # self.client.wait_for_server(rospy.Duration(5.0))
+
+        wait = self.client.wait_for_server()
         if not wait:
             rospy.logerr("Action server not available!")
             rospy.signal_shutdown("Action server not available!")
@@ -44,7 +48,8 @@ class SequenceOfGoals():
                       "by the Action Server...")
 
     def feedback_cb(self, feedback):
-        rospy.loginfo("Feedback for goal pose " + str(self.goal_cnt+1)+" received")
+        #rospy.loginfo("Feedback for goal pose " + str(self.goal_cnt+1)+" received")
+        pass
 
     def done_cb(self, status, result):
         self.goal_cnt += 1
@@ -63,6 +68,8 @@ class SequenceOfGoals():
 
         if status == GoalStatus.SUCCEEDED:
             rospy.loginfo("Goal pose " + str(self.goal_cnt) + " reached")
+            # Sleep for 1s
+            rospy.sleep(1)
             if self.goal_cnt < len(self.goals_seq):
                 next_goal = MoveBaseGoal()
                 next_goal.target_pose.header.frame_id = self.goals_frame
@@ -135,4 +142,9 @@ class SequenceOfGoals():
 if __name__ == '__main__':
     rospy.init_node('sequence_of_goals')
     move_base_seq = SequenceOfGoals()
+    t1 = datetime.now()
     move_base_seq.run()
+    t2 = datetime.now()
+    delta = t2 - t1
+    delta_secs = delta.total_seconds()
+    rospy.loginfo("Mission duration: " + str(delta_secs) + " secs")
